@@ -19,6 +19,8 @@ class PremiumizeConnector:
         return request_json['transfers']
 
     def updateWatchlist(self, list):
+        if len(list) < 1: # if there's nothing to watch, don't query the server
+            return
         hashes = [t['hash'] for t in list]
         newList = self.getList()
         list[:] = [t for t in newList if t['hash'] in hashes]
