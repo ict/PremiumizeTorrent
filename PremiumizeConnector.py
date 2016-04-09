@@ -1,11 +1,13 @@
 import time
 import requests
+from threading import Lock
 
 class PremiumizeConnector:
     def __init__(self, user, passwd):
         self.user = user
         self.passwd = passwd
         self.headers = {'cookie': 'login={0}:{1}'.format(self.user, self.passwd)}
+        self.myLock = Lock()
 
 
     def getList(self):
@@ -21,7 +23,7 @@ class PremiumizeConnector:
     def updateWatchlist(self, list):
         if len(list) < 1: # if there's nothing to watch, don't query the server
             return
-        hashes = [t['hash'] for t in list]
+        hashes = [t['hash'] for t in list if t]
         newList = self.getList()
         list[:] = [t for t in newList if t['hash'] in hashes]
 
@@ -47,7 +49,7 @@ class PremiumizeConnector:
         biggest = None
         for entry in obj.keys():
             if obj[entry]['type'] == 'dir':
-                biggest, biggestSize = self.getBiggestHelper(obj[entry]['children'], biggestSize)
+                biggest, biggestSize = self.__getBiggestHelper(obj[entry]['children'], biggestSize)
             else:
                 assert obj[entry]['type'] == 'file', 'unknown entry type'
                 size = obj[entry]['size']
@@ -57,6 +59,7 @@ class PremiumizeConnector:
         return biggest, biggestSize
 
     def addTorrent(self, file):
+        self.myLock.acquire()
         currentTransfers = self.getList()
 
         url = r'https://www.premiumize.me/api/transfer/create?type=torrent'
@@ -68,13 +71,21 @@ class PremiumizeConnector:
             request_json = request.json()
 
         if request_json['status'] == 'error':
-            print "addTorrent:", request_json
+            self.myLock.release()
             return None
 
-        time.sleep(0.1)
-        newList = self.getList()
-        myTorrent = [x for x in newList if x not in currentTransfers]
-        assert len(myTorrent) == 1, 'Cannot determine added torrent'
+        numTries = 0
+        while numTries < 10:
+            time.sleep(0.1)
+            newList = self.getList()
+            myTorrent = [x for x in newList if x not in currentTransfers]
+            if len(myTorrent) == 1:
+                break
+            assert len(myTorrent) == 0, myTorrent
+            numTries += 1
+
         myTorrent = myTorrent[0]
+
+        self.myLock.release()
 
         return myTorrent
