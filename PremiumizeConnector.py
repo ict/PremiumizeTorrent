@@ -49,7 +49,10 @@ class PremiumizeConnector:
         biggest = None
         for entry in obj.keys():
             if obj[entry]['type'] == 'dir':
-                biggest, biggestSize = self.__getBiggestHelper(obj[entry]['children'], biggestSize)
+                biggestChild, biggestSizeChild = self.__getBiggestHelper(obj[entry]['children'], biggestSize)
+                if biggestSizeChild > biggestSize:
+                    biggest = biggestChild
+                    biggestSize = biggestSizeChild
             else:
                 assert obj[entry]['type'] == 'file', 'unknown entry type'
                 size = obj[entry]['size']
