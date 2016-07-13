@@ -1,13 +1,12 @@
 import time
 import requests
-from threading import Lock
+import sys
 
 class PremiumizeConnector:
     def __init__(self, user, passwd):
         self.user = user
         self.passwd = passwd
         self.headers = {'cookie': 'login={0}:{1}'.format(self.user, self.passwd)}
-        self.myLock = Lock()
 
 
     def getList(self):
@@ -20,12 +19,10 @@ class PremiumizeConnector:
             raise ValueError(['message'])
         return request_json['transfers']
 
-    def updateWatchlist(self, list):
-        if len(list) < 1: # if there's nothing to watch, don't query the server
-            return
-        hashes = [t['hash'] for t in list if t]
+    def getFinished(self, ids):
         newList = self.getList()
-        list[:] = [t for t in newList if t['hash'] in hashes]
+        result = [t for t in newList if t['id'] in ids and t['status'] == 'finished']
+        return result
 
     def getContents(self, hash):
         url = r'https://www.premiumize.me/api/torrent/browse'
@@ -37,7 +34,7 @@ class PremiumizeConnector:
         request_json = request.json()
         if request_json['status'] == 'error':
             print "getContents:", request_json
-            raise ValueError(['message'])
+            raise ValueError(request_json['message'])
         return request_json['content']
 
     def getBiggestFileDownload(self, hash):
@@ -62,7 +59,6 @@ class PremiumizeConnector:
         return biggest, biggestSize
 
     def addTorrent(self, file):
-        self.myLock.acquire()
         currentTransfers = self.getList()
 
         url = r'https://www.premiumize.me/api/transfer/create?type=torrent'
@@ -74,21 +70,7 @@ class PremiumizeConnector:
             request_json = request.json()
 
         if request_json['status'] == 'error':
-            self.myLock.release()
+            print "Could not add:", request_json['message']
             return None
 
-        numTries = 0
-        while numTries < 10:
-            time.sleep(0.1)
-            newList = self.getList()
-            myTorrent = [x for x in newList if x not in currentTransfers]
-            if len(myTorrent) == 1:
-                break
-            assert len(myTorrent) == 0, myTorrent
-            numTries += 1
-
-        myTorrent = myTorrent[0]
-
-        self.myLock.release()
-
-        return myTorrent
+        return request_json['id']
